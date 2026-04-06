@@ -1,1 +1,407 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <title>Lines 98 - Mobile</title>
+    <script src="https://cdn.jsdelivr.net/npm/phaser@3.60.0/dist/phaser.min.js"></script>
+    <style>
+        body {
+            margin: 0;
+            padding: 0;
+            background-color: #1a1a1a;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            height: 100vh;
+        }
+        canvas {
+            box-shadow: 0 0 20px rgba(0,0,0,0.5);
+        }
+    </style>
+</head>
+<body>
 
+<script>
+const CONFIG = {
+    GRID_SIZE: 9,
+    TILE_SIZE: 76,
+    COLORS: [
+        0xff0000, // Red
+        0x00ff00, // Green
+        0x0088ff, // Blue
+        0xffff00, // Yellow
+        0x00ffff, // Cyan
+        0xff00ff, // Magenta
+        0xff8800  // Orange
+    ]
+};
+
+class Lines98 extends Phaser.Scene {
+    constructor() {
+        super('Lines98');
+    }
+
+    create() {
+        // Game State
+        this.board = Array(CONFIG.GRID_SIZE).fill(null).map(() => Array(CONFIG.GRID_SIZE).fill(null));
+        this.score = 0;
+        this.nextColors = [];
+        this.selectedBall = null;
+        this.isAnimating = false;
+        
+        // Layout calculations
+        this.boardWidth = CONFIG.GRID_SIZE * CONFIG.TILE_SIZE;
+        this.offsetX = (this.scale.width - this.boardWidth) / 2;
+        this.offsetY = 300; // Leave space at the top for UI
+
+        // Generate Textures programmatically
+        this.generateTextures();
+
+        // UI Setup
+        this.createUI();
+        this.drawGrid();
+
+        // Input
+        this.input.on('pointerdown', this.handleInput, this);
+
+        // Start Game
+        this.generateNextColors();
+        this.spawnBalls(5); // Spawn initial 5 balls
+        this.generateNextColors(); // Queue the next 3
+    }
+
+    generateTextures() {
+        const g = this.add.graphics();
+        
+        // Ball Texture
+        g.fillStyle(0xffffff, 1);
+        g.fillCircle(30, 30, 28);
+        // Add a little highlight for 3D effect
+        g.fillStyle(0xffffff, 0.5);
+        g.fillCircle(20, 20, 8);
+        g.generateTexture('ball', 60, 60);
+        
+        g.clear();
+    }
+
+    createUI() {
+        this.add.text(this.scale.width / 2, 80, 'LINES 98', { fontSize: '48px', fontStyle: 'bold', color: '#ffffff' }).setOrigin(0.5);
+        
+        this.scoreText = this.add.text(this.scale.width / 2, 140, 'Score: 0', { fontSize: '32px', color: '#ffff00' }).setOrigin(0.5);
+        
+        this.add.text(this.scale.width / 2, 200, 'Next:', { fontSize: '24px', color: '#aaaaaa' }).setOrigin(0.5);
+        
+        this.nextPreviewSprites = [];
+        for (let i = 0; i < 3; i++) {
+            let sprite = this.add.sprite(this.scale.width / 2 - 60 + (i * 60), 250, 'ball').setScale(0.5);
+            this.nextPreviewSprites.push(sprite);
+        }
+
+        let restartBtn = this.add.text(this.scale.width / 2, this.scale.height - 80, 'RESTART GAME', { 
+            fontSize: '28px', backgroundColor: '#333333', padding: {x: 20, y: 10}, color: '#ffffff' 
+        }).setOrigin(0.5).setInteractive();
+        restartBtn.on('pointerdown', () => this.scene.restart());
+    }
+
+    drawGrid() {
+        const g = this.add.graphics();
+        g.lineStyle(2, 0x444444);
+        g.fillStyle(0x222222);
+
+        g.fillRect(this.offsetX, this.offsetY, this.boardWidth, this.boardWidth);
+        g.strokeRect(this.offsetX, this.offsetY, this.boardWidth, this.boardWidth);
+
+        for (let i = 1; i < CONFIG.GRID_SIZE; i++) {
+            // Vertical lines
+            g.moveTo(this.offsetX + i * CONFIG.TILE_SIZE, this.offsetY);
+            g.lineTo(this.offsetX + i * CONFIG.TILE_SIZE, this.offsetY + this.boardWidth);
+            // Horizontal lines
+            g.moveTo(this.offsetX, this.offsetY + i * CONFIG.TILE_SIZE);
+            g.lineTo(this.offsetX + this.boardWidth, this.offsetY + i * CONFIG.TILE_SIZE);
+        }
+        g.strokePath();
+    }
+
+    getEmptyCells() {
+        let empty = [];
+        for (let r = 0; r < CONFIG.GRID_SIZE; r++) {
+            for (let c = 0; c < CONFIG.GRID_SIZE; c++) {
+                if (!this.board[r][c]) empty.push({ r, c });
+            }
+        }
+        return empty;
+    }
+
+    generateNextColors() {
+        this.nextColors = [];
+        for (let i = 0; i < 3; i++) {
+            let color = Phaser.Utils.Array.GetRandom(CONFIG.COLORS);
+            this.nextColors.push(color);
+            this.nextPreviewSprites[i].setTint(color);
+            this.nextPreviewSprites[i].setVisible(true);
+        }
+    }
+
+    spawnBalls(count) {
+        let emptyCells = this.getEmptyCells();
+        if (emptyCells.length === 0) return this.gameOver();
+
+        let spawnedCount = Math.min(count, emptyCells.length);
+        
+        for (let i = 0; i < spawnedCount; i++) {
+            let cellIndex = Phaser.Math.Between(0, emptyCells.length - 1);
+            let cell = emptyCells.splice(cellIndex, 1)[0];
+            
+            let color = count === 5 ? Phaser.Utils.Array.GetRandom(CONFIG.COLORS) : this.nextColors[i];
+            
+            let x = this.offsetX + cell.c * CONFIG.TILE_SIZE + CONFIG.TILE_SIZE / 2;
+            let y = this.offsetY + cell.r * CONFIG.TILE_SIZE + CONFIG.TILE_SIZE / 2;
+            
+            let sprite = this.add.sprite(x, y, 'ball').setTint(color).setScale(0);
+            
+            this.board[cell.r][cell.c] = { color: color, sprite: sprite };
+            
+            this.tweens.add({
+                targets: sprite,
+                scale: 1,
+                duration: 300,
+                ease: 'Back.out'
+            });
+        }
+
+        if (this.getEmptyCells().length === 0) {
+            this.time.delayedCall(400, () => {
+                // Allows surviving if the last spawn clears a line!
+                if (this.getEmptyCells().length === 0) {
+                    this.gameOver();
+                }
+            });
+        }
+    }
+
+    handleInput(pointer) {
+        if (this.isAnimating) return;
+
+        let col = Math.floor((pointer.x - this.offsetX) / CONFIG.TILE_SIZE);
+        let row = Math.floor((pointer.y - this.offsetY) / CONFIG.TILE_SIZE);
+
+        // Check out of bounds
+        if (row < 0 || row >= CONFIG.GRID_SIZE || col < 0 || col >= CONFIG.GRID_SIZE) return;
+
+        let cell = this.board[row][col];
+
+        if (cell) {
+            // Select ball
+            if (this.selectedBall) {
+                this.selectedBall.sprite.clearTint();
+                this.selectedBall.sprite.setTint(this.selectedBall.color); // reset color
+                this.tweens.killTweensOf(this.selectedBall.sprite);
+                this.selectedBall.sprite.setScale(1);
+            }
+            this.selectedBall = { row, col, sprite: cell.sprite, color: cell.color };
+            
+            // Selection Animation (Pulsing)
+            this.tweens.add({
+                targets: cell.sprite,
+                scale: 1.15,
+                duration: 300,
+                yoyo: true,
+                repeat: -1
+            });
+        } else if (this.selectedBall) {
+            // Attempt to move
+            let path = this.findPath(this.selectedBall.row, this.selectedBall.col, row, col);
+            if (path) {
+                this.moveBall(path, row, col);
+            } else {
+                // Shake ball if no path
+                this.cameras.main.shake(200, 0.01);
+            }
+        }
+    }
+
+    // Breadth-First Search for pathfinding
+    findPath(startR, startC, targetR, targetC) {
+        let queue = [{ r: startR, c: startC, path: [] }];
+        let visited = Array(CONFIG.GRID_SIZE).fill(null).map(() => Array(CONFIG.GRID_SIZE).fill(false));
+        visited[startR][startC] = true;
+
+        let directions = [[-1,0], [1,0], [0,-1], [0,1]];
+
+        while (queue.length > 0) {
+            let current = queue.shift();
+
+            if (current.r === targetR && current.c === targetC) {
+                return current.path;
+            }
+
+            for (let dir of directions) {
+                let r = current.r + dir[0];
+                let c = current.c + dir[1];
+
+                if (r >= 0 && r < CONFIG.GRID_SIZE && c >= 0 && c < CONFIG.GRID_SIZE) {
+                    if (!visited[r][c] && this.board[r][c] === null) {
+                        visited[r][c] = true;
+                        queue.push({ r, c, path: [...current.path, {r, c}] });
+                    }
+                }
+            }
+        }
+        return null; // No path found
+    }
+
+    moveBall(path, targetR, targetC) {
+        this.isAnimating = true;
+        let ballData = this.board[this.selectedBall.row][this.selectedBall.col];
+        this.board[this.selectedBall.row][this.selectedBall.col] = null; // Free old spot
+        
+        this.tweens.killTweensOf(ballData.sprite);
+        ballData.sprite.setScale(1);
+        
+        this.selectedBall = null;
+
+        // Phaser 3.60 Sequence using tweens.chain()
+        let tweensList = path.map(step => ({
+            x: this.offsetX + step.c * CONFIG.TILE_SIZE + CONFIG.TILE_SIZE / 2,
+            y: this.offsetY + step.r * CONFIG.TILE_SIZE + CONFIG.TILE_SIZE / 2,
+            duration: 50 // fast movement per tile
+        }));
+
+        this.tweens.chain({
+            targets: ballData.sprite,
+            tweens: tweensList,
+            onComplete: () => {
+                this.board[targetR][targetC] = ballData;
+                
+                let linesCleared = this.checkLines();
+                if (!linesCleared) {
+                    this.spawnBalls(3);
+                    let newlyCleared = this.checkLines();
+                    this.generateNextColors();
+                    
+                    if (!newlyCleared && this.getEmptyCells().length > 0) {
+                        this.isAnimating = false;
+                    }
+                }
+            }
+        });
+    }
+
+    checkLines() {
+        let ballsToRemove = new Set();
+        let dirs = [
+            [{r:0, c:1}, {r:0, c:-1}], // Horizontal
+            [{r:1, c:0}, {r:-1, c:0}], // Vertical
+            [{r:1, c:1}, {r:-1, c:-1}],// Diagonal 1
+            [{r:1, c:-1}, {r:-1, c:1}] // Diagonal 2
+        ];
+
+        for (let r = 0; r < CONFIG.GRID_SIZE; r++) {
+            for (let c = 0; c < CONFIG.GRID_SIZE; c++) {
+                if (!this.board[r][c]) continue;
+                let color = this.board[r][c].color;
+
+                for (let dirPair of dirs) {
+                    let line = [{r, c}];
+                    
+                    for (let dir of dirPair) {
+                        let stepR = r + dir.r;
+                        let stepC = c + dir.c;
+                        while (stepR >= 0 && stepR < CONFIG.GRID_SIZE && stepC >= 0 && stepC < CONFIG.GRID_SIZE) {
+                            if (this.board[stepR][stepC] && this.board[stepR][stepC].color === color) {
+                                line.push({r: stepR, c: stepC});
+                                stepR += dir.r;
+                                stepC += dir.c;
+                            } else {
+                                break;
+                            }
+                        }
+                    }
+
+                    if (line.length >= 5) {
+                        line.forEach(pos => ballsToRemove.add(`${pos.r},${pos.c}`));
+                    }
+                }
+            }
+        }
+
+        if (ballsToRemove.size > 0) {
+            this.removeBalls(ballsToRemove);
+            return true;
+        }
+        return false;
+    }
+
+    removeBalls(ballsSet) {
+        this.isAnimating = true;
+        let count = ballsSet.size;
+        
+        // Classic scoring: 5 balls = 10 pts. Every extra ball adds more points.
+        let addedScore = 10 + (count - 5) * 5; 
+        this.score += addedScore;
+        this.scoreText.setText(`Score: ${this.score}`);
+
+        ballsSet.forEach(posString => {
+            let [r, c] = posString.split(',').map(Number);
+            let ball = this.board[r][c];
+            this.board[r][c] = null; // clear board immediately
+
+            this.tweens.add({
+                targets: ball.sprite,
+                scale: 0,
+                alpha: 0,
+                duration: 300,
+                onComplete: () => {
+                    ball.sprite.destroy();
+                }
+            });
+        });
+
+        this.time.delayedCall(300, () => {
+            if (this.getEmptyCells().length > 0) {
+                this.isAnimating = false;
+            }
+        });
+    }
+
+    gameOver() {
+        this.isAnimating = true;
+        let overlay = this.add.rectangle(0, 0, this.scale.width, this.scale.height, 0x000000, 0.8).setOrigin(0);
+        this.add.text(this.scale.width / 2, this.scale.height / 2 - 50, 'GAME OVER', { fontSize: '64px', fontStyle: 'bold', color: '#ff0000' }).setOrigin(0.5);
+        this.add.text(this.scale.width / 2, this.scale.height / 2 + 20, `Final Score: ${this.score}`, { fontSize: '40px', color: '#ffffff' }).setOrigin(0.5);
+        
+        let restartTxt = this.add.text(this.scale.width / 2, this.scale.height / 2 + 100, 'Tap to Restart', { fontSize: '32px', color: '#00ffff' }).setOrigin(0.5);
+        
+        this.tweens.add({
+            targets: restartTxt,
+            alpha: 0.2,
+            yoyo: true,
+            repeat: -1,
+            duration: 500
+        });
+
+        this.input.once('pointerdown', () => {
+            this.scene.restart();
+        });
+    }
+}
+
+// Phaser Configuration for Mobile Portrait
+const config = {
+    type: Phaser.AUTO,
+    scale: {
+        mode: Phaser.Scale.FIT, // Scales the game to fit the screen
+        autoCenter: Phaser.Scale.CENTER_BOTH,
+        width: 720,
+        height: 1280
+    },
+    backgroundColor: '#1a1a1a',
+    scene: Lines98
+};
+
+const game = new Phaser.Game(config);
+
+</script>
+</body>
+</html>
